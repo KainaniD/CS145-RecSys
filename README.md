@@ -1,5 +1,5 @@
 
-# Recommendation System Competition Platform
+# Recommendation System Competition Platform (Group Project)
 
 A data mining course competition platform for designing recommendation algorithms that maximize revenue through multi-iteration learning.
 
