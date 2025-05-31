@@ -21,6 +21,7 @@ class DecisionTreeRecommender():
         np.random.seed(seed)
         self.model = DecisionTreeRegressor(random_state=self.seed)
         self.scalar = StandardScaler()
+        self.trained = False
 
     def fit(self, log:DataFrame, user_features=None, item_features=None):
         # log.show(5)
@@ -45,6 +46,7 @@ class DecisionTreeRecommender():
             x = pd_log.drop(['relevance'], axis=1)
 
             self.model.fit(x,y)
+            self.trained = True
 
     def predict(self, log, k, users:DataFrame, items:DataFrame, user_features=None, item_features=None, filter_seen_items=True):
 
