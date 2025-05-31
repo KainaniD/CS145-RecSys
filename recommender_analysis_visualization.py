@@ -46,6 +46,7 @@ from sample_recommenders import (
     ContentBasedRecommender, 
     SVMRecommender, 
 )
+from recommenders.my_decision_tree import DecisionTreeRecommender
 from config import DEFAULT_CONFIG, EVALUATION_METRICS
 
 # Cell: Define custom recommender template
@@ -72,6 +73,7 @@ class MyRecommender:
             seed: Random seed for reproducibility
         """
         self.seed = seed
+        np.random.seed(seed)
         # Add your initialization logic here
     
     def fit(self, log, user_features=None, item_features=None):
@@ -89,6 +91,8 @@ class MyRecommender:
         #  2. Learn user preferences from the log
         #  3. Build item similarity matrices or latent factor models
         #  4. Store learned parameters for later prediction
+
+
         pass
     
     def predict(self, log, k, users, items, user_features=None, item_features=None, filter_seen_items=True):
@@ -451,8 +455,12 @@ def run_recommender_analysis():
         PopularityRecommender(alpha=1.0, seed=42),
         ContentBasedRecommender(similarity_threshold=0.0, seed=42),
         MyRecommender(seed=42)  # Add your custom recommender here
+        ,
+        DecisionTreeRecommender(seed=42)
     ]
-    recommender_names = ["SVM", "Random", "Popularity", "ContentBased", "MyRecommender"]
+    recommender_names = [
+        "SVM", "Random", "Popularity", "ContentBased", "MyRecommender", 
+        "DecisionTree"]
     
     # Initialize recommenders with initial history
     for recommender in recommenders:

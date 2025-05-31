@@ -81,7 +81,7 @@ class SVMRecommender(BaseRecommender):
         
         cross = cross.sort_values(by=['user_idx', 'relevance'], ascending=[True, False])
         cross = cross.groupby('user_idx').head(k)
-
+        
         cross['price'] = cross['orig_price']
        
         return pandas_to_spark(cross)
