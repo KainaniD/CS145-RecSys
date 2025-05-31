@@ -50,7 +50,7 @@ from sample_recommenders import (
 #IMPORT THREE MODELS HERE
 from recommenders.my_decision_tree import DecisionTreeRecommender
 from recommenders.my_logistic_recommender import LogisticRecommender
-
+from recommenders.my_knn_recommender import KNNRecommender
 from config import DEFAULT_CONFIG, EVALUATION_METRICS
 
 # Cell: Define custom recommender template
@@ -460,11 +460,12 @@ def run_recommender_analysis():
         ContentBasedRecommender(similarity_threshold=0.0, seed=42),
         MyRecommender(seed=42),
         DecisionTreeRecommender(seed=42),
-        LogisticRecommender(seed = 42)
+        LogisticRecommender(seed = 42),
+        KNNRecommender(seed=42)
     ]
     recommender_names = [
         "SVM", "Random", "Popularity", "ContentBased", "MyRecommender",
-        "DecisionTree", "LogisticRecommender"]
+        "DecisionTree", "LogisticRecommender", "KNNRecommender"]
 
     # Initialize recommenders with initial history
     for recommender in recommenders:
