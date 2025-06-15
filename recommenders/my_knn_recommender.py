@@ -94,85 +94,93 @@ class KNNRecommender:
         )
         self.nn_model.fit(user_feat_matrix)
 
-    def predict(self,log,k,users,items, user_features = None, item_features = None, filter_seen_items = True):
+    def predict(self, log, k, users, items,
+                user_features=None, item_features=None,
+                filter_seen_items=True):
+
         users_pd = users.select('user_idx').toPandas()
-        items_pd = items.select('item_idx', 'price').toPandas().set_index('item_idx')
+        items_pd = items.select('item_idx', 'price')\
+                        .toPandas().set_index('item_idx')
         candidate_item_ids = list(items_pd.index)
 
         user_to_pos = {u: pos for pos, u in enumerate(self.user_idx_list)}
         item_to_pos = {i: pos for pos, i in enumerate(self.item_idx_list)}
 
-        # build a price vector aligned to self.item_idx_list
-        all_price_vector = self.item_price.reindex(self.item_idx_list).fillna(0.0).values
+        # price vector aligned to self.item_idx_list
+        all_price_vector = (
+            self.item_price
+                .reindex(self.item_idx_list)
+                .fillna(0.0)
+                .values
+        )
 
-        results = []  # collect per-user recommendation dataframes
+        results = []
 
-        # for each requested user, compute top-k
         for u in users_pd['user_idx']:
             if u not in user_to_pos:
-                # skip unseen or new users
                 continue
 
             u_pos = user_to_pos[u]
-            u_feat = self.user_df_scaled.iloc[u_pos].values.reshape(1, -1)  # (1, D_user)
+            u_feat = self.user_df_scaled.iloc[u_pos].values.reshape(1, -1)
+            dists, idxs = self.nn_model.kneighbors(u_feat, n_neighbors=self.k + 1)
 
-            # retrieve k+1 nearest neighbors (first is the user)
-            distances, indices = self.nn_model.kneighbors(u_feat, n_neighbors=self.k + 1)
-            neighbor_positions = indices[0].tolist()
-            if neighbor_positions[0] == u_pos:
-                neighbor_positions = neighbor_positions[1:]
+            # drop self, keep exactly k neighbours
+            neigh_pos = idxs[0].tolist()
+            if neigh_pos[0] == u_pos:
+                neigh_pos = neigh_pos[1:]
             else:
-                neighbor_positions = [p for p in neighbor_positions if p != u_pos][: self.k]
+                neigh_pos = [p for p in neigh_pos if p != u_pos][:self.k]
 
-            # count how many neighbors purchased each item in the global list
-            neighbor_user_ids = [self.user_idx_list[p] for p in neighbor_positions]
+            neighbour_ids = [self.user_idx_list[p] for p in neigh_pos]
+
+            # count buys among neighbours
             purchase_counts = np.zeros(len(self.item_idx_list), dtype=np.float32)
-            for n_uid in neighbor_user_ids:
-                for purchased_item in self.purchase_dict.get(n_uid, set()):
-                    if purchased_item in item_to_pos:
-                        purchase_counts[item_to_pos[purchased_item]] += 1.0
+            for n_uid in neighbour_ids:
+                for bought in self.purchase_dict.get(n_uid, ()):
+                    if bought in item_to_pos:
+                        purchase_counts[item_to_pos[bought]] += 1.0
 
-            # compute purchase probabilities: p_hat[i] = (# of neighbors who bought i) / k
             p_hat = purchase_counts / float(self.k)
+            expected_revenue = p_hat * all_price_vector
 
-            # compute expected revenue: expected_revenue[i] = p_hat[i] * price[i]
-            expected_revenue_all = p_hat * all_price_vector
-
-            # filter out items already seen by this user if requested
             if filter_seen_items:
-                for seen_item in self.purchase_dict.get(u, set()):
-                    if seen_item in item_to_pos:
-                        expected_revenue_all[item_to_pos[seen_item]] = -np.inf
+                for seen in self.purchase_dict.get(u, ()):
+                    if seen in item_to_pos:
+                        expected_revenue[item_to_pos[seen]] = -np.inf
 
-            # build a pandas df for candidate items for this user
-            user_rows = []
+            # build a temp DataFrame with the raw float scores
+            rows = []
             for item_id in candidate_item_ids:
-                if item_id not in item_to_pos:
-                    # if candidate item not present in training set, skip
+                pos = item_to_pos.get(item_id, None)
+                if pos is None:
                     continue
-                idx = item_to_pos[item_id]
-                rel = float(expected_revenue_all[idx])
-                if rel == -np.inf:
+                score = expected_revenue[pos]
+                if score == -np.inf:
                     continue
-                user_rows.append({'user_idx': int(u), 'item_idx': int(item_id), 'relevance': rel})
+                rows.append({
+                    'user_idx': int(u),
+                    'item_idx': int(item_id),
+                    'expected_revenue': float(score)
+                })
 
-            if not user_rows:
+            if not rows:
                 continue
 
-            user_df_candidates = pd.DataFrame(user_rows)
-            # sort by relevance descending and take top k
-            user_df_candidates = user_df_candidates.sort_values(by='relevance', ascending=False)
-            topk_df = user_df_candidates.head(k)
-            results.append(topk_df)
+            df = pd.DataFrame(rows)
+            # sort by the float revenue, take top-k 
+            df_sorted = df.sort_values('expected_revenue', ascending=False)
+            topk = df_sorted.head(k).copy()
 
-        # if no recommendations were generated, return an empty df
+            topk['relevance'] = 1.0
+
+            # drop the interim score column
+            topk = topk[['user_idx', 'item_idx', 'relevance']]
+
+            results.append(topk)
+
         if not results:
-            empty_pd = pd.DataFrame(columns=['user_idx', 'item_idx', 'relevance'])
-            return pandas_to_spark(empty_pd)
+            empty = pd.DataFrame(columns=['user_idx', 'item_idx', 'relevance'])
+            return pandas_to_spark(empty)
 
-        # cncatenate all user-specific DataFrames
-        all_recs_pd = pd.concat(results, ignore_index=True)
-
-        # convert back to spark df
-        recs_spark = pandas_to_spark(all_recs_pd)
-        return recs_spark
+        all_recs = pd.concat(results, ignore_index=True)
+        return pandas_to_spark(all_recs)
