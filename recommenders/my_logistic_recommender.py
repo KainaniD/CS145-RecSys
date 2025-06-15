@@ -26,6 +26,11 @@ class LogisticRecommender:
         users_pd = user_features.toPandas()
         items_pd = item_features.toPandas()
 
+        # Only use users/items from training log
+        users_pd = users_pd[users_pd['user_idx'].isin(log_pd['user_idx'].unique())]
+        items_pd = items_pd[items_pd['item_idx'].isin(log_pd['item_idx'].unique())]
+
+
         # Merge everything
         merged = log_pd.merge(users_pd, on='user_idx').merge(items_pd, on='item_idx')
 
@@ -36,9 +41,13 @@ class LogisticRecommender:
         X_cat = merged[['segment', 'category']]
         X_num = merged[['price']]
 
-        # Apply one-hot encoding to categorical features and standard scaling to numerical features
-        X_cat_encoded = self.encoder.fit_transform(X_cat)
-        X_num_scaled = self.scaler.fit_transform(X_num)
+        # FIT encoders only on training data
+        self.encoder.fit(X_cat)
+        self.scaler.fit(X_num)
+
+        # Transform
+        X_cat_encoded = self.encoder.transform(X_cat)
+        X_num_scaled = self.scaler.transform(X_num)
 
         # Combine one-hot encoded features into a single feature matrix.
         X = np.hstack([X_cat_encoded, X_num_scaled])
@@ -55,8 +64,6 @@ class LogisticRecommender:
 
         # Create all possible user-item pairs for scoring by performing a cross join
         cross = users_pd.merge(items_pd, how='cross')
-
-        # Keep the original price for scoring and ensure user/item indices are integers
         cross['orig_price'] = cross['price']
         cross['user_idx'] = cross['user_idx'].astype(int)
         cross['item_idx'] = cross['item_idx'].astype(int)
@@ -67,13 +74,10 @@ class LogisticRecommender:
 
         X_cat_encoded = self.encoder.transform(X_cat)
         X_num_scaled = self.scaler.transform(X_num)
-
         X = np.hstack([X_cat_encoded, X_num_scaled])
 
-        # Predict the probabilities
+        # Predict the probabilities and compute relevance
         probs = self.model.predict_proba(X)[:, 1]
-
-        # Prioritizes items likely to be bought AND generate higher revenue.
         cross['relevance'] = probs * cross['orig_price']
 
         spark = SparkSession.builder.getOrCreate()
