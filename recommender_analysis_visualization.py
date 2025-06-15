@@ -52,6 +52,7 @@ from recommenders.my_decision_tree import DecisionTreeRecommender
 from recommenders.my_logistic_recommender import LogisticRecommender
 from recommenders.my_knn_recommender import KNNRecommender
 from recommenders.my_decision_tree_classifier_recommender import DecisionTreeClassifierRecommender
+from recommenders.my_lstm_recommender import LSTMRecommender
 
 from config import DEFAULT_CONFIG, EVALUATION_METRICS
 
@@ -464,11 +465,27 @@ def run_recommender_analysis():
         DecisionTreeRecommender(seed=42),
         LogisticRecommender(seed = 42),
         KNNRecommender(seed=42),
-        DecisionTreeClassifierRecommender(seed=42)
+        DecisionTreeClassifierRecommender(seed=42),
+        LSTMRecommender(seed=42, epoch_num=20)
     ]
     recommender_names = [
         "SVM", "Random", "Popularity", "ContentBased", "MyRecommender",
-        "DecisionTree", "LogisticRecommender", "KNNRecommender", "DecisionTreeClassifierRecommender"]
+        "DecisionTree", "LogisticRecommender", "KNNRecommender", "DecisionTreeClassifierRecommender", "LSTM Recommender"]
+
+    # recommenders = [
+    #     LSTMRecommender(seed=42, epoch_num=10),
+    #     LSTMRecommender(seed=42, epoch_num=20),
+    #     LSTMRecommender(seed=42, epoch_num=30),
+    #     LSTMRecommender(seed=42, epoch_num=40),
+    #     LSTMRecommender(seed=42, epoch_num=50)
+    # ]
+    # recommender_names = [
+    #     "LSTM Recommender 10",
+    #     "LSTM Recommender 20",
+    #     "LSTM Recommender 30",
+    #     "LSTM Recommender 40",
+    #     "LSTM Recommender 50"]
+
 
     # Initialize recommenders with initial history
     for recommender in recommenders:
