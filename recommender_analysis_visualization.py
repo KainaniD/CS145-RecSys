@@ -492,7 +492,31 @@ def run_recommender_analysis():
     #     "LSTM Recommender 30",
     #     "LSTM Recommender 40",
     #     "LSTM Recommender 50"]
+    # RNN hyperparameter tuning configs
+    # rnn_configs = [
+    #     {'hidden_dim': 32, 'layer_dim': 1, 'lr': 0.01, 'epochs': 10},
+    #     {'hidden_dim': 32, 'layer_dim': 2, 'lr': 0.01, 'epochs': 20},
+    #     {'hidden_dim': 50, 'layer_dim': 2, 'lr': 0.005, 'epochs': 20},
+    #     {'hidden_dim': 64, 'layer_dim': 2, 'lr': 0.01, 'epochs': 30},
+    #     {'hidden_dim': 64, 'layer_dim': 3, 'lr': 0.005, 'epochs': 40},
+    #     {'hidden_dim': 128, 'layer_dim': 2, 'lr': 0.001, 'epochs': 40},
+    # ]
 
+    # recommenders = []
+    # recommender_names = []
+
+    # for cfg in rnn_configs:
+    #     recommender = RNNRecommender(
+    #         seed=42,
+    #         epoch_num=cfg['epochs'],
+    #         hidden_dim=cfg['hidden_dim'],
+    #         layer_dim=cfg['layer_dim'],
+    #         lr=cfg['lr']
+    #     )
+    #     recommenders.append(recommender)
+    #     recommender_names.append(
+    #         f"RNN(h={cfg['hidden_dim']},L={cfg['layer_dim']},lr={cfg['lr']},e={cfg['epochs']})"
+    #     )
 
     # Initialize recommenders with initial history
     for recommender in recommenders:
