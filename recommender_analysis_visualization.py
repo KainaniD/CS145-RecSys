@@ -468,7 +468,7 @@ def run_recommender_analysis():
         LogisticRecommender(seed = 42),
         KNNRecommender(seed=42),
         DecisionTreeClassifierRecommender(seed=42),
-        LSTMRecommender(seed=42, epoch_num=20),
+        LSTMRecommender(seed=42, epoch_num=20, hidden_dim=32, layer_dim=2, dropout=0.25),
         RNNRecommender(seed=42, epoch_num=20),
         ARRecommender(max_lag=2),
         LightGCNRecommender(seed=42,emb_dim=128, layers=3, lr=0.005, epochs=15)
@@ -477,7 +477,7 @@ def run_recommender_analysis():
         "SVM", "Random", "Popularity", "ContentBased", "MyRecommender",
         "DecisionTree", "LogisticRecommender", "KNNRecommender",
         "DecisionTreeClassifierRecommender", "LSTMRecommender",
-        "RNNRecommender", "ARRecommender", "LightGCN Recommender"
+        "RNNRecommender", "ARRecommender", "LightGCNRecommender"
     ]
 
     # recommenders = [
