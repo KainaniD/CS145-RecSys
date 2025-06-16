@@ -47,6 +47,14 @@ from sample_recommenders import (
     SVMRecommender,
 )
 
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from sklearn.preprocessing import StandardScaler
+
+from sim4rec.utils import pandas_to_spark
+
 #IMPORT THREE MODELS HERE
 from recommenders.my_decision_tree import DecisionTreeRecommender
 from recommenders.my_logistic_recommender import LogisticRecommender
@@ -64,96 +72,112 @@ from config import DEFAULT_CONFIG, EVALUATION_METRICS
 Below is a template class for implementing a custom recommender system.
 Students should extend this class with their own recommendation algorithm.
 """
+class LSTMModel(nn.Module):
+    def __init__(self, input_dim, hidden_dim, layer_dim, output_dim, dropout):
+        super(LSTMModel, self).__init__()
+        self.hidden_dim = hidden_dim
+        self.layer_dim = layer_dim
+        self.lstm = nn.LSTM(input_dim, hidden_dim, layer_dim, batch_first=True, dropout=dropout)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+
+    def forward(self, x, h0=None, c0=None):
+        if h0 is None or c0 is None:
+            h0 = torch.zeros(self.layer_dim, x.size(0), self.hidden_dim).to(x.device)
+            c0 = torch.zeros(self.layer_dim, x.size(0), self.hidden_dim).to(x.device)
+        
+        out, (hn, cn) = self.lstm(x, (h0, c0))
+        out = F.sigmoid(self.fc(out[:, -1, :]))
+        return out, hn, cn
 
 class MyRecommender:
-    """
-    Template class for implementing a custom recommender.
-
-    This class provides the basic structure required to implement a recommender
-    that can be used with the Sim4Rec simulator. Students should extend this class
-    with their own recommendation algorithm.
-    """
-
-    def __init__(self, seed=None):
-        """
-        Initialize recommender.
-
-        Args:
-            seed: Random seed for reproducibility
-        """
+    def __init__(self, seed=None, epoch_num=10, hidden_dim=50, layer_dim=1, dropout=0.0):
         self.seed = seed
         np.random.seed(seed)
-        # Add your initialization logic here
 
-    def fit(self, log, user_features=None, item_features=None):
-        """
-        Train the recommender model based on interaction history.
+        self.model = LSTMModel(input_dim=1, hidden_dim=hidden_dim, layer_dim=layer_dim, output_dim=1, dropout=dropout)
+        self.criterion = nn.MSELoss()
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01)
+        self.scalar = StandardScaler()
+        self.epoch_num = epoch_num
+        self.trained = False
 
-        Args:
-            log: Interaction log with user_idx, item_idx, and relevance columns
-            user_features: User features dataframe (optional)
-            item_features: Item features dataframe (optional)
-        """
-        # Implement your training logic here
-        # For example:
-        #  1. Extract relevant features from user_features and item_features
-        #  2. Learn user preferences from the log
-        #  3. Build item similarity matrices or latent factor models
-        #  4. Store learned parameters for later prediction
+    def fit(self, log:DataFrame, user_features=None, item_features=None):
+        # log.show(5)
+        # user_features.show(5)
+        # item_features.show(5)
+
+        if user_features and item_features:
+            pd_log = log.join(
+                user_features,
+                on='user_idx'
+            ).join(
+                item_features,
+                on='item_idx'
+            ).drop(
+                'user_idx', 'item_idx', '__iter'
+            ).toPandas()
+
+            #one-hot encode categorical features
+            pd_log = pd.get_dummies(pd_log)
+            pd_log['price'] = self.scalar.fit_transform(pd_log[['price']])
+
+            #input and output variables
+            y = pd_log['relevance']
+            x = pd_log.drop(['relevance'], axis=1)
+            x = x.astype(np.float32)
+            y = y.astype(np.float32)
+            x = torch.from_numpy(x.values).unsqueeze(2)
+            y = torch.from_numpy(y.values).unsqueeze(1)
+
+            #train model
+            h0, c0 = None, None
+            for epoch in range(self.epoch_num):
+                self.model.train()
+                self.optimizer.zero_grad()
+
+                outputs, h0, c0 = self.model(x, h0, c0)
+
+                loss = self.criterion(outputs, y)
+                loss.backward()
+                self.optimizer.step()
+
+                h0 = h0.detach()
+                c0 = c0.detach()
+
+            self.trained = True
 
 
-        pass
 
-    def predict(self, log, k, users, items, user_features=None, item_features=None, filter_seen_items=True):
-        """
-        Generate recommendations for users.
+    def predict(self, log, k, users:DataFrame, items:DataFrame, user_features=None, item_features=None, filter_seen_items=True):
 
-        Args:
-            log: Interaction log with user_idx, item_idx, and relevance columns
-            k: Number of items to recommend
-            users: User dataframe
-            items: Item dataframe
-            user_features: User features dataframe (optional)
-            item_features: Item features dataframe (optional)
-            filter_seen_items: Whether to filter already seen items
+        cross = users.join(items).drop('__iter').toPandas().copy()
+        #one hot encode categorical features
+        cross = pd.get_dummies(cross)
+        cross['orig_price'] = cross['price']
+        cross['price'] = self.scalar.transform(cross[['price']])
 
-        Returns:
-            DataFrame: Recommendations with user_idx, item_idx, and relevance columns
-        """
-        # Implement your recommendation logic here
-        # For example:
-        #  1. Extract relevant features for prediction
-        #  2. Calculate relevance scores for each user-item pair
-        #  3. Rank items by relevance and select top-k
-        #  4. Return a dataframe with columns: user_idx, item_idx, relevance
+        #making predictions using model
 
-        # Example of a random recommender implementation:
-        # Cross join users and items
-        recs = users.crossJoin(items)
+        cross32 = cross.astype(np.float32)
+        cross_tensor = torch.from_numpy(cross32.values).unsqueeze(2)
 
-        # Filter out already seen items if needed
-        if filter_seen_items and log is not None:
-            seen_items = log.select("user_idx", "item_idx")
-            recs = recs.join(
-                seen_items,
-                on=["user_idx", "item_idx"],
-                how="left_anti"
-            )
+        with torch.no_grad():
+            prob, _, _ = self.model(cross_tensor)
 
-        # Add random relevance scores
-        recs = recs.withColumn(
-            "relevance",
-            sf.rand(seed=self.seed)
-        )
+        cross['prob'] = pd.DataFrame(prob.squeeze().numpy())
 
-        # Rank items by relevance for each user
-        window = Window.partitionBy("user_idx").orderBy(sf.desc("relevance"))
-        recs = recs.withColumn("rank", sf.row_number().over(window))
 
-        # Filter top-k recommendations
-        recs = recs.filter(sf.col("rank") <= k).drop("rank")
+        #calculate relevance as prob * price
+        cross['relevance'] = cross['prob'] * cross['price']
+        
+        #filter out seen items if required
+        cross = cross.sort_values(by=['user_idx', 'relevance'], ascending=[True, False])
+        cross = cross.groupby('user_idx').head(k)
 
-        return recs
+        cross['price'] = cross['orig_price']
+
+        cross = cross.astype({col: 'int32' for col in cross.select_dtypes(include=['uint8']).columns})
+        return pandas_to_spark(cross)
 
 # Cell: Data Exploration Functions
 """
@@ -463,7 +487,7 @@ def run_recommender_analysis():
         RandomRecommender(seed=42),
         PopularityRecommender(alpha=1.0, seed=42),
         ContentBasedRecommender(similarity_threshold=0.0, seed=42),
-        MyRecommender(seed=42),
+        MyRecommender(seed=42, epoch_num=20, hidden_dim=32, layer_dim=2, dropout=0.25),
         DecisionTreeRecommender(seed=42),
         LogisticRecommender(seed = 42),
         KNNRecommender(seed=42),
