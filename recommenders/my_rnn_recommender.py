@@ -11,7 +11,6 @@ class RNNModel(nn.Module):
         super(RNNModel, self).__init__()
         self.hidden_dim = hidden_dim
         self.layer_dim = layer_dim
-        # self.rnn = nn.RNN(input_dim, hidden_dim, layer_dim, batch_first=True)
         self.rnn = nn.RNN(input_dim, hidden_dim, layer_dim, batch_first=True, dropout=0.3 if layer_dim > 1 else 0)
         self.fc = nn.Linear(hidden_dim, output_dim)
 
@@ -25,11 +24,11 @@ class RNNModel(nn.Module):
         return out, hn
 
 class RNNRecommender():
-    def __init__(self, seed=None, epoch_num=10):
+    def __init__(self, seed=None, epoch_num=20, hidden_dim=32, layer_dim=2, lr=0.01):
         self.seed = seed
         np.random.seed(seed)
 
-        self.model = RNNModel(input_dim=1, hidden_dim=50, layer_dim=1, output_dim=1)
+        self.model = RNNModel(input_dim=1, hidden_dim=hidden_dim, layer_dim=layer_dim, output_dim=1)
         self.criterion = nn.BCEWithLogitsLoss()
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=0.01)
         self.scalar = StandardScaler()
