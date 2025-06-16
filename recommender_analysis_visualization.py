@@ -54,7 +54,7 @@ from recommenders.my_knn_recommender import KNNRecommender
 from recommenders.my_decision_tree_classifier_recommender import DecisionTreeClassifierRecommender
 from recommenders.my_lstm_recommender import LSTMRecommender
 from recommenders.my_rnn_recommender import RNNRecommender
-
+from recommenders.my_lightgcn import LightGCNRecommender
 from config import DEFAULT_CONFIG, EVALUATION_METRICS
 
 # Cell: Define custom recommender template
@@ -468,11 +468,12 @@ def run_recommender_analysis():
         KNNRecommender(seed=42),
         DecisionTreeClassifierRecommender(seed=42),
         LSTMRecommender(seed=42, epoch_num=20),
-        RNNRecommender(seed=42, epoch_num=20)
+        RNNRecommender(seed=42, epoch_num=20),
+        LightGCNRecommender(seed=42,emb_dim=128, layers=3, lr=0.005, epochs=15)
     ]
     recommender_names = [
         "SVM", "Random", "Popularity", "ContentBased", "MyRecommender",
-        "DecisionTree", "LogisticRecommender", "KNNRecommender", "DecisionTreeClassifierRecommender", "LSTM Recommender", "RNN Recommender"]
+        "DecisionTree", "LogisticRecommender", "KNNRecommender", "DecisionTreeClassifierRecommender", "LSTM Recommender", "RNN Recommender","LightGCN Recommender"]
 
     # recommenders = [
     #     LSTMRecommender(seed=42, epoch_num=10),
