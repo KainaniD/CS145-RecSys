@@ -6,7 +6,7 @@ from sklearn.tree import DecisionTreeClassifier
 
 from sim4rec.utils import pandas_to_spark
 
-class DTClassifier:
+class DecisionTreeClassifierRecommender:
     
     def __init__(self, seed=None, max_depth=None, min_samples_leaf=1, full=True):
         """
