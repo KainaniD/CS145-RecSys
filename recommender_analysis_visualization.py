@@ -54,6 +54,7 @@ from recommenders.my_knn_recommender import KNNRecommender
 from recommenders.my_decision_tree_classifier_recommender import DecisionTreeClassifierRecommender
 from recommenders.my_lstm_recommender import LSTMRecommender
 from recommenders.my_rnn_recommender import RNNRecommender
+from recommenders.my_ar_recommender import ARRecommender
 from recommenders.my_lightgcn import LightGCNRecommender
 from config import DEFAULT_CONFIG, EVALUATION_METRICS
 
