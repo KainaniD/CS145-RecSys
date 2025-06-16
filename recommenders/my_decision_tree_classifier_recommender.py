@@ -1,31 +1,35 @@
 import numpy as np
 import pandas as pd
 
-from sklearn.preprocessing import StandardScaler, OrdinalEncoder, OneHotEncoder
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.tree import DecisionTreeClassifier
 
 from sim4rec.utils import pandas_to_spark
 
-class DecisionTreeClassifierRecommender:
+class DTClassifier:
     
-    # Pass in hyperparameters here?
-    def __init__(self, seed=None):
+    def __init__(self, seed=None, max_depth=None, min_samples_leaf=1, full=True):
         """
         Initialize recommender.
         
         Args:
             seed: Random seed for reproducibility
+            max_depth: Maximum decision tree depth (optional)
+            min_samples_leaf: Minimum number of samples in each tree leaf (optional)
+            full: Whether to use the user and item features (true by default)
         """
         self.seed = seed
         
         # Add your initialization logic here
         self.model = DecisionTreeClassifier(
             criterion='entropy',
-            max_depth=5,
+            max_depth=max_depth,
+            min_samples_leaf=min_samples_leaf,
             random_state=self.seed
         )
+        self.full = full
+        
         self.onehot = OneHotEncoder(sparse_output=False, handle_unknown='ignore')
-        self.ordinal = OrdinalEncoder()
         self.scaler = StandardScaler()
         self.trained = False
     
@@ -44,18 +48,14 @@ class DecisionTreeClassifierRecommender:
         #  2. Learn user preferences from the log
         #  3. Build item similarity matrices or latent factor models
         #  4. Store learned parameters for later prediction
-        if not (user_features and item_features):
-            return
+        
+        # if self.full and not (user_features and item_features):
+        #     return
         
         # Convert to pandas DataFrames
         log_pd = log.toPandas()
         users_pd = user_features.toPandas()
         items_pd = item_features.toPandas()
-        
-        # Debugging
-        print(log_pd)
-        print(users_pd)
-        print(items_pd)
         
         # Merge everything
         merged = log_pd.merge(users_pd, on='user_idx').merge(items_pd, on='item_idx')
@@ -63,22 +63,24 @@ class DecisionTreeClassifierRecommender:
         # Use relevance as label
         y = merged['relevance']
         
-        # Select categorical, ordinal, and numerical features
-        X_cat = merged[['category']]
-        X_ord = merged[['segment']]
-        X_num = merged[['price']]
+        # Select categorical and numerical features
+        X_cat = merged[['category', 'segment']]
+        if self.full:
+            # Use the user and item features
+            X_num = merged[['price']
+                    + [f'user_attr_{i}' for i in range(20)]
+                    + [f'item_attr_{i}' for i in range(20)]]
+        else:
+            X_num = merged[['price']]
         
         # Encode categorical features
         X_cat_encoded = self.onehot.fit_transform(X_cat)
-        
-        # Encode ordinal features
-        X_ord_encoded = self.ordinal.fit_transform(X_ord)
         
         # Scale numerical features
         X_num_scaled = self.scaler.fit_transform(X_num)
         
         # Compile all features
-        X = np.hstack([X_cat_encoded, X_ord_encoded, X_num_scaled])
+        X = np.hstack([X_cat_encoded, X_num_scaled])
         
         # Train the decision tree model
         self.model.fit(X, y)
@@ -108,47 +110,52 @@ class DecisionTreeClassifierRecommender:
         #  3. Rank items by relevance and select top-k
         #  4. Return a dataframe with columns: user_idx, item_idx, relevance
         
-        if not (user_features and item_features and self.trained):
+        if not self.trained:
             return None
         
+        # if self.full and not (user_features and item_features):
+        #     return None
+        
         # Convert to pandas DataFrames
-        users_pd = user_features.toPandas()
-        items_pd = item_features.toPandas()
+        # users_pd = user_features.toPandas().copy()
+        # items_pd = item_features.toPandas().copy()
+        users_pd = users.toPandas().copy()
+        items_pd = items.toPandas().copy()
         
         # Cross-join users and items
         cross = users_pd.merge(items_pd, how='cross')
-        
-        # Store original price information before transforming
-        cross['orig_price'] = cross['price']
         
         # Convert user and item indices to integers
         cross['user_idx'] = cross['user_idx'].astype(int)
         cross['item_idx'] = cross['item_idx'].astype(int)
         
-        # Select categorical, ordinal, and numerical features
-        X_cat = cross[['category']]
-        X_ord = cross[['segment']]
-        X_num = cross[['price']]
+        # Select categorical and numerical features
+        X_cat = cross[['category', 'segment']]
+        if self.full:
+            # Use the user and item features
+            X_num = cross[['price']
+                    + [f'user_attr_{i}' for i in range(20)]
+                    + [f'item_attr_{i}' for i in range(20)]]
+        else:
+            X_num = cross[['price']]
         
         # Encode categorical features
-        X_cat_encoded = self.onehot.fit_transform(X_cat)
-        
-        # Encode ordinal features
-        X_ord_encoded = self.ordinal.fit_transform(X_ord)
+        X_cat_encoded = self.onehot.transform(X_cat)
         
         # Scale numerical features
-        X_num_scaled = self.scaler.fit_transform(X_num)
+        X_num_scaled = self.scaler.transform(X_num)
         
         # Compile all features
-        X = np.hstack([X_cat_encoded, X_ord_encoded, X_num_scaled])
+        X = np.hstack([X_cat_encoded, X_num_scaled])
         
-        # Make predictions of relevance based on the features;
-        # calculate relevance as probability * original price
+        # Make probability/relevance predictions based on the features;
+        # calculate "score" as probability * original price
         probs = self.model.predict_proba(X)[:, 1]
-        cross['relevance'] = probs * cross['orig_price']
+        cross['relevance'] = probs
+        cross['score'] = probs * cross['price']
         
         # Group recommendations by user and keep only the best k
-        cross = cross.sort_values(by=['user_idx', 'relevance'], ascending=[True, False])
+        cross = cross.sort_values(by=['user_idx', 'score'], ascending=[True, False])
         cross = cross.groupby('user_idx').head(k)
         
         # Return results as a Spark DataFrame
